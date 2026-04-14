@@ -6,6 +6,15 @@ It is built to reduce repetitive rewriting, improve message alignment, and give 
 
 ---
 
+## Who This Is For
+
+- Job seekers who want stronger, role-specific applications without starting from scratch every time
+- Career switchers translating existing experience into a new function or industry
+- Professionals applying to multiple roles and needing a faster, repeatable workflow
+- People who want practical AI assistance but still keep final editorial control
+
+---
+
 ## What You Get
 
 From one target role and your base resume, Resume Tailor generates:
