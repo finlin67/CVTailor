@@ -20837,6 +20837,7 @@ var __async = (__this, __arguments, generator) => {
   }
   .status-msg.error { background: #fdf0ee; color: var(--error); border: 1px solid #f5c6c0; display: block; }
   .status-msg.info { background: #eef3fb; color: var(--navy); border: 1px solid #c5d5ef; display: block; }
+  .status-msg.warning { background: #fff8e9; color: #5d4d1e; border: 1px solid #e8d49a; display: block; }
   .status-msg .status-title { font-weight: 600; margin-bottom: 4px; }
   .status-inline-actions { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .btn-inline-retry {
@@ -21777,10 +21778,26 @@ var __async = (__this, __arguments, generator) => {
   }
   @media (max-width: 720px) {
     .wizard-main { padding: 18px 14px 28px; }
+    .step-help-btn {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      min-height: 44px;
+      font-size: 15px;
+    }
+    .help-nav-item { min-height: 44px; padding: 10px 10px; }
+    .btn-help-main { min-height: 44px; padding: 12px 18px; }
+    .step-rail-item { min-height: 44px; padding: 10px 14px; }
+    .tab-btn { min-height: 44px; }
+    .btn-next, .btn-back, .btn-generate, .btn-continue, .btn-skip, .fit-reanalyze, .btn-fetch, .btn-history, .btn-clear-all, .btn-action { min-height: 44px; }
+    .history-header { min-height: 44px; }
+    .help-close { min-width: 44px; min-height: 44px; }
+    .ollama-setup-close { min-width: 44px; min-height: 44px; }
     .step-header { padding: 14px; flex-wrap: wrap; align-items: center; }
     .step-title { font-size: 17px; }
     .step-header-toggle.step-header-right { flex: 1 1 100%; justify-content: space-between; margin-top: 4px; }
-    .step-summary { max-width: 72vw; font-size: 12px; }
+    .step-summary { max-width: 72vw; font-size: 12px; overflow-wrap: anywhere; word-break: break-word; }
+    .step-title { overflow-wrap: anywhere; word-break: break-word; }
     .step-body { padding: 0 14px; }
     .step-card.active .step-body { padding-bottom: 16px; }
     .step-headline { font-size: 21px; }
@@ -22423,7 +22440,9 @@ async function copyCommand(btn, command) {
       btn.textContent = original;
       btn.style.color = '';
     }, 1200);
-  } catch {}
+  } catch {
+    alert('Could not copy — select the text and copy manually (Ctrl+C or Cmd+C).');
+  }
 }
 
 function toggleTroubleshooting() {
@@ -22631,10 +22650,29 @@ function anthropic529FinalMessageHtml() {
   return "Anthropic's API is temporarily overloaded (529 error).<br>This is not a problem with your key or settings.<br>Possible causes:<br>• Your account credit balance may be $0 — check <a href=\"https://console.anthropic.com/billing\" target=\"_blank\" rel=\"noopener noreferrer\">console.anthropic.com/billing</a><br>• Anthropic's servers are briefly busy — check <a href=\"https://status.anthropic.com\" target=\"_blank\" rel=\"noopener noreferrer\">status.anthropic.com</a><br>Try again in a minute, or switch to ChatGPT or Gemini using the provider toggle above.";
 }
 
+function isNetworkFailure(err) {
+  if (!err) return false;
+  const name = err.name || '';
+  const msg = String(err.message || '').toLowerCase();
+  return name === 'TypeError' || msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('load failed');
+}
+
+function wrapNetworkError(err) {
+  if (isNetworkFailure(err)) {
+    return new Error('Network error: could not reach the API. Check your connection, VPN or firewall, and if using Ollama that it is running (ollama serve).');
+  }
+  return err;
+}
+
 async function fetchWithRetry(url, options, maxRetries = 3) {
   const delays = [3000, 6000, 12000];
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const response = await fetch(url, options);
+    let response;
+    try {
+      response = await fetch(url, options);
+    } catch (e) {
+      throw wrapNetworkError(e);
+    }
     if (response.status === 529) {
       if (attempt < maxRetries) {
         const waitSec = delays[attempt] / 1000;
@@ -22652,14 +22690,9 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
   }
 }
 
-function isRetryableProviderError(status, message = '') {
-  if ([408, 409, 425, 429, 500, 502, 503, 504, 529].includes(status)) return true;
-  const lower = String(message).toLowerCase();
-  return lower.includes('overloaded') || lower.includes('rate limit') || lower.includes('temporar');
-}
-
 async function callModel(userPrompt, systemPrompt = '', options = {}) {
   const maxTokens = Number(options.maxTokens) > 0 ? Number(options.maxTokens) : 4000;
+  try {
   if (currentMode === 'claude') {
     const apiKey = document.getElementById('apiKey').value.trim();
     const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
@@ -22685,7 +22718,12 @@ async function callModel(userPrompt, systemPrompt = '', options = {}) {
       } catch {}
       throw new Error(message);
     }
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      throw new Error('Claude returned a response that was not valid JSON. Try again in a moment.');
+    }
     return data.content?.[0]?.text || '';
   }
 
@@ -22715,7 +22753,12 @@ async function callModel(userPrompt, systemPrompt = '', options = {}) {
       } catch {}
       throw new Error(message);
     }
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      throw new Error('OpenAI returned a response that was not valid JSON. Try again in a moment.');
+    }
     return data.choices?.[0]?.message?.content || '';
   }
 
@@ -22736,13 +22779,20 @@ async function callModel(userPrompt, systemPrompt = '', options = {}) {
       } catch {}
       throw new Error(message);
     }
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      throw new Error('Gemini returned a response that was not valid JSON. Try again in a moment.');
+    }
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   }
 
   const host  = document.getElementById('ollamaHost').value.trim().replace(/\/$/, '');
   const model = document.getElementById('ollamaModel').value;
-  const response = await fetch(`${host}/api/chat`, {
+  let response;
+  try {
+    response = await fetch(`${host}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -22755,9 +22805,21 @@ async function callModel(userPrompt, systemPrompt = '', options = {}) {
       options: { temperature: 0.3, num_predict: maxTokens }
     })
   });
+  } catch (e) {
+    throw wrapNetworkError(e);
+  }
   if (!response.ok) throw new Error(`Ollama error ${response.status} — is Ollama running? Try: ollama serve`);
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch (e) {
+    throw new Error('Ollama returned a response that was not valid JSON. Is the model still loading?');
+  }
   return data.message?.content || '';
+  } catch (err) {
+    if (err && err.code === 'ANTHROPIC_529_RETRIES') throw err;
+    throw wrapNetworkError(err);
+  }
 }
 
 function setStatus(msg, type) {
@@ -22782,9 +22844,13 @@ function toggleRawResponse() {
 }
 
 async function retryGenerationFromStatus(btn) {
+  if (generationInProgress) return;
   if (btn) btn.disabled = true;
-  await generate();
-  if (btn) btn.disabled = false;
+  try {
+    await generate();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 function switchTab(tab, btn) {
@@ -22806,7 +22872,12 @@ function updateConnCount() {
 
 async function copyOutput(id, btn) {
   const text = document.getElementById(id).innerText.replace(/\|$/, '').trim();
-  await navigator.clipboard.writeText(text);
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    alert('Could not copy to the clipboard. Your browser may block clipboard access — select the text and copy manually (Ctrl+C or Cmd+C).');
+    return;
+  }
   const original = btn.dataset.originalText || btn.textContent;
   btn.dataset.originalText = original;
   btn.textContent = '✓ Copied!';
@@ -22823,6 +22894,10 @@ function setProgress(pct) {
 
 // ── Fit Check ─────────────────────────────────────────────────────
 let fitCheckPassed = false;
+let fitCheckInProgress = false;
+let generationInProgress = false;
+/** Provider mode when the last successful fit check finished (for drift warning vs generation). */
+let lastFitCheckProviderMode = null;
 
 function scoreClass(n) {
   if (n >= 85) return 'score-excellent';
@@ -22847,6 +22922,7 @@ function scoreSublabel(n) {
 }
 
 async function runFitCheck(reanalyze = false) {
+  if (fitCheckInProgress) return;
   const company         = document.getElementById('company').value.trim();
   const role            = document.getElementById('role').value.trim();
   const jobDescription  = document.getElementById('jobDescription').value.trim();
@@ -22862,6 +22938,10 @@ async function runFitCheck(reanalyze = false) {
     setStatus('Add company, role title, job description, and your base resume to continue.', 'error'); return;
   }
 
+  fitCheckInProgress = true;
+  const genBtn = document.getElementById('generateBtn');
+
+  try {
   // Reset state
   fitCheckPassed = false;
   const fitPanel = document.getElementById('fitPanel');
@@ -22877,7 +22957,6 @@ async function runFitCheck(reanalyze = false) {
   document.getElementById('continueBtn').disabled = true;
 
   // Lock main generate button
-  const genBtn = document.getElementById('generateBtn');
   genBtn.disabled = true;
   genBtn.classList.add('loading');
 
@@ -22906,17 +22985,14 @@ Return ONLY a JSON object with exactly this structure:
 - Be specific, reference actual experience from the resume and requirements from the JD
 - Return ONLY valid JSON, no preamble`;
 
-  const apiKey = document.getElementById('apiKey')?.value?.trim();
-  console.log('Fit check starting, key present:', !!apiKey, 'length:', apiKey?.length);
   currentRunContext = 'fit';
+  let raw;
   try {
-    let raw;
-    try {
-      raw = await callModel(fitPrompt, '', { maxTokens: 500 });
-    } catch (firstErr) {
-      const fallbackPrompt = `You are a senior executive recruiter evaluating fit.\n\nCANDIDATE RESUME:\n${baseResume.substring(0, 1400)}\n\nJOB: ${role} at ${company}\nJOB DESCRIPTION:\n${jobDescription.substring(0, 1400)}\n\nReturn ONLY valid JSON:\n{"score":0,"bullets":[{"type":"strength","text":"..."},{"type":"strength","text":"..."},{"type":"gap","text":"..."},{"type":"gap","text":"..."}]}`;
-      raw = await callModel(fallbackPrompt, '', { maxTokens: 350 });
-    }
+    raw = await callModel(fitPrompt, '', { maxTokens: 500 });
+  } catch (firstErr) {
+    const fallbackPrompt = `You are a senior executive recruiter evaluating fit.\n\nCANDIDATE RESUME:\n${baseResume.substring(0, 1400)}\n\nJOB: ${role} at ${company}\nJOB DESCRIPTION:\n${jobDescription.substring(0, 1400)}\n\nReturn ONLY valid JSON:\n{"score":0,"bullets":[{"type":"strength","text":"..."},{"type":"strength","text":"..."},{"type":"gap","text":"..."},{"type":"gap","text":"..."}]}`;
+    raw = await callModel(fallbackPrompt, '', { maxTokens: 350 });
+  }
 
     // Parse
     let parsed;
@@ -22925,8 +23001,13 @@ Return ONLY a JSON object with exactly this structure:
       parsed = JSON.parse(clean);
     } catch {
       const match = raw.match(/\{[\s\S]*"score"[\s\S]*"bullets"[\s\S]*\}/);
-      if (match) parsed = JSON.parse(match[0]);
-      else throw new Error('Could not parse fit analysis response.');
+      if (match) {
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch {
+          throw new Error('Could not parse fit analysis response — the model returned text that was not valid JSON. Try again.');
+        }
+      } else throw new Error('Could not parse fit analysis response.');
     }
 
     const score = Math.min(100, Math.max(0, Math.round(parsed.score)));
@@ -22951,10 +23032,9 @@ Return ONLY a JSON object with exactly this structure:
     // Enable continue
     document.getElementById('continueBtn').disabled = false;
     fitCheckPassed = true;
+    lastFitCheckProviderMode = currentMode;
 
   } catch (err) {
-    console.error('Fit check error:', err);
-    
     if (String(err?.message || '').includes('529: Anthropic API overloaded after retries')) {
       document.getElementById('fitLabel').textContent = 'Analysis failed';
       document.getElementById('fitSublabel').textContent = '';
@@ -22970,12 +23050,12 @@ Return ONLY a JSON object with exactly this structure:
     
     if (err.message?.includes('403') || err.message?.includes('401')) {
       userMsg += 'API key was rejected — double-check it is correct and has available credit balance.';
-    } else if (err.message?.includes('CORS') || err.message?.includes('Failed to fetch')) {
-      userMsg += 'Could not reach the API. Make sure the anthropic-dangerous-direct-browser-access header is present in the fit check API call.';
+    } else if (err.message?.includes('Network error')) {
+      userMsg = err.message;
     } else if (err.message?.includes('parse') || err.message?.includes('JSON')) {
       userMsg += 'Response format error — the model returned unexpected content. Try running again.';
     } else {
-      userMsg += err.message || 'Unknown error — check browser console (F12) for details.';
+      userMsg += err.message || 'Unknown error. Try again, or switch provider in Step 1.';
     }
     
     // Show the error clearly in the fit panel
@@ -22987,21 +23067,28 @@ Return ONLY a JSON object with exactly this structure:
     document.getElementById('continueBtn').disabled = false;
   } finally {
     currentRunContext = '';
-    genBtn.disabled = false;
-    genBtn.classList.remove('loading');
+    fitCheckInProgress = false;
+    if (genBtn) {
+      genBtn.disabled = false;
+      genBtn.classList.remove('loading');
+    }
     updateAccordionMeta();
   }
 }
 
 async function proceedGenerate() {
+  if (generationInProgress) return;
   const btn = document.getElementById('continueBtn');
   btn.disabled = true;
   btn.classList.add('loading');
   btn.querySelector('.continue-text').textContent = 'Generating...';
-  await generate();
-  btn.disabled = false;
-  btn.classList.remove('loading');
-  btn.querySelector('.continue-text').textContent = '✦ Looks good — build my materials';
+  try {
+    await generate();
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.querySelector('.continue-text').textContent = '✦ Looks good — build my materials';
+  }
 }
 
 function skipRole() {
@@ -23012,6 +23099,7 @@ function skipRole() {
   document.getElementById('jobUrl').value = '';
   setFetchStatus('', '');
   fitCheckPassed = false;
+  lastFitCheckProviderMode = null;
   keepStep5Open = false;
   goToStep(2);
   updateStep2Continue();
@@ -23105,8 +23193,15 @@ Return ONLY valid JSON: {"company":"...","title":"...","description":"..."}`;
       parsed = JSON.parse(clean);
     } catch {
       const match = raw.match(/\{[\s\S]*"company"[\s\S]*"title"[\s\S]*\}/);
-      if (match) parsed = JSON.parse(match[0]);
-      else throw new Error('Could not parse extracted job data.');
+      if (match) {
+        try {
+          parsed = JSON.parse(match[0]);
+        } catch {
+          throw new Error('Could not parse extracted job data — the model returned text that was not valid JSON. Paste the job description manually.');
+        }
+      } else {
+        throw new Error('Could not parse extracted job data. Paste the job description manually.');
+      }
     }
 
     // Populate fields
@@ -23148,6 +23243,7 @@ function setMode(mode) {
 }
 
 async function generate() {
+  if (generationInProgress) return;
   const company = document.getElementById('company').value.trim();
   const role    = document.getElementById('role').value.trim();
   const jobDescription = document.getElementById('jobDescription').value.trim();
@@ -23165,6 +23261,11 @@ async function generate() {
   }
 
   clearStatus();
+  if (lastFitCheckProviderMode !== null && lastFitCheckProviderMode !== currentMode && fitCheckPassed) {
+    setStatus(`You ran the fit check with <strong>${providerName(lastFitCheckProviderMode)}</strong>, but <strong>${providerName(currentMode)}</strong> is selected now. Generation uses the current provider — re-run the fit check if you want a score from the same model.`, 'warning');
+  }
+
+  generationInProgress = true;
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
   btn.classList.add('loading');
@@ -23325,10 +23426,11 @@ Return ONLY valid JSON: {"resume":"...","coverLetter":"...","connectionNote":"..
       const rawSnippet = (parts[1] || '').trim().slice(0, 300);
       setStatus(`<div class="status-title">${friendly}</div><div class="status-inline-actions"><button class="raw-toggle" id="rawToggleBtn" onclick="toggleRawResponse()">Show raw response ▾</button><button class="btn-inline-retry" onclick="retryGenerationFromStatus(this)">↺ Try again</button></div><div class="raw-response-box" id="rawResponseBox">${rawSnippet}</div>`, 'error');
     } else {
-      setStatus('Something went wrong: ' + msg, 'error');
+      setStatus('Generation failed: ' + msg, 'error');
     }
   } finally {
     currentRunContext = '';
+    generationInProgress = false;
     btn.disabled = false;
     btn.classList.remove('loading');
     btn.querySelector('.btn-text').textContent = '🎯 Analyze Fit';
@@ -23345,8 +23447,13 @@ const HISTORY_KEY = 'resumeTailor_history';
 const MAX_HISTORY = 20;
 
 function loadHistory() {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
-  catch { return []; }
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY) || '[]';
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function saveToHistory(company, role, resume, coverLetter, connectionNote = '', recruiterMessage = '', outreachTargets = []) {
@@ -23364,7 +23471,16 @@ function saveToHistory(company, role, resume, coverLetter, connectionNote = '', 
   };
   history.unshift(entry);
   if (history.length > MAX_HISTORY) history.splice(MAX_HISTORY);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      setStatus('Could not save this run — browser storage is full. Clear previous generations below, then try again.', 'error');
+      return;
+    }
+    setStatus('Could not save to history: ' + (e.message || 'unknown error'), 'error');
+    return;
+  }
   renderHistory();
 }
 
@@ -23433,13 +23549,27 @@ function downloadFromHistory(id, type) {
 
 function deleteFromHistory(id) {
   const history = loadHistory().filter(e => e.id !== id);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      setStatus('Could not update history — storage may be full. Try clearing all history.', 'error');
+      return;
+    }
+    setStatus('Could not update history.', 'error');
+    return;
+  }
   renderHistory();
 }
 
 function clearAllHistory() {
   if (!confirm('Clear all generation history? This cannot be undone.')) return;
-  localStorage.removeItem(HISTORY_KEY);
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+  } catch (e) {
+    setStatus('Could not clear history. Try again or clear site data for this page in your browser settings.', 'error');
+    return;
+  }
   renderHistory();
 }
 
@@ -23732,8 +23862,7 @@ async function downloadDocx(type) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
   } catch(err) {
-    alert('Download failed: ' + err.message + '\n\nOpen browser console (F12) for details.');
-    console.error(err);
+    alert('Download failed: ' + (err && err.message ? err.message : String(err)) + '\n\nIf this keeps happening, open the browser console (F12) and share the error with support.');
   }
 }
 </script>
