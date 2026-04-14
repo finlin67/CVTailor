@@ -20215,6 +20215,7 @@ var __async = (__this, __arguments, generator) => {
     box-shadow: 0 4px 20px rgba(11, 30, 58, 0.12);
     position: sticky;
     top: 12px;
+    margin-top: 58px;
     align-self: flex-start;
     max-height: calc(100vh - 24px);
     overflow-x: hidden;
@@ -20227,7 +20228,7 @@ var __async = (__this, __arguments, generator) => {
     display: flex;
     flex-direction: column;
     gap: 0;
-    padding: 14px 12px 16px;
+    padding: 28px 12px 16px;
     min-height: 0;
   }
   .btn-help-in-legend {
@@ -20237,6 +20238,18 @@ var __async = (__this, __arguments, generator) => {
   .help-legend-panel .help-brand {
     flex-shrink: 0;
     padding-top: 4px;
+  }
+  .help-brand-link {
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 10px;
+  }
+  .help-brand-link:hover {
+    background: rgba(255,255,255,0.08);
   }
   .help-legend-panel .help-nav {
     flex: 0 1 auto;
@@ -21774,7 +21787,9 @@ var __async = (__this, __arguments, generator) => {
       max-height: none;
       position: relative;
       top: 0;
+      margin-top: 0;
     }
+    .help-legend-inner { padding-top: 14px; }
   }
   @media (max-width: 720px) {
     .wizard-main { padding: 18px 14px 28px; }
@@ -21833,13 +21848,13 @@ var __async = (__this, __arguments, generator) => {
   <aside class="help-legend-panel" id="helpLegendPanel" aria-label="Onboarding guide">
     <div class="help-legend-inner">
       <button type="button" class="btn-help-main btn-help-in-legend" onclick="openHelpModal('getting-started')">How does this work?</button>
-      <div class="help-brand">
+      <button type="button" class="help-brand help-brand-link" onclick="openHelpModal('getting-started')">
         <span class="help-brand-icon" aria-hidden="true">✨</span>
         <div class="help-brand-text">
           <strong>Resume Tailor</strong>
           <span>Onboarding Guide</span>
         </div>
-      </div>
+      </button>
       <div class="help-nav" id="helpNav">
         <button type="button" class="help-nav-item active" data-help-section="getting-started" onclick="openHelpModal('getting-started')"><div class="help-nav-top"><span class="help-nav-emoji">🚀</span><span class="help-nav-title">Getting Started</span></div><div class="help-nav-sub">What this tool does and how to begin</div></button>
         <button type="button" class="help-nav-item" data-help-section="api-key" onclick="openHelpModal('api-key')"><div class="help-nav-top"><span class="help-nav-emoji">🔑</span><span class="help-nav-title">Your API Key</span></div><div class="help-nav-sub">Which AI to use and how to get a key</div></button>
@@ -23225,7 +23240,12 @@ Return ONLY valid JSON: {"company":"...","title":"...","description":"..."}`;
 let currentMode = 'claude';
 
 function setMode(mode) {
+  const providerChanged = currentMode !== mode;
   currentMode = mode;
+  if (providerChanged) {
+    // Fit check context is provider-specific; clear when provider changes.
+    lastFitCheckProviderMode = null;
+  }
   document.getElementById('modeSelect').value = mode;
   document.getElementById('claudeFields').style.display = mode === 'ollama' ? 'none' : 'flex';
   document.getElementById('ollamaFields').classList.toggle('visible', mode === 'ollama');
