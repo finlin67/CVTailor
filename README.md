@@ -1,4 +1,4 @@
-<img width="1024" height="572" alt="image" src="https://github.com/user-attachments/assets/75209aad-6b63-4a8d-8b32-4d8e891b43ae" />
+
 # Resume Tailor (Open Source)
 
 Resume Tailor helps job seekers go from **job post → tailored application package** in one focused workflow.
