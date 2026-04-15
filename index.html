@@ -20342,6 +20342,40 @@ var __async = (__this, __arguments, generator) => {
     filter: brightness(1.06);
     transform: translateY(-1px);
   }
+  .local-pref-row {
+    margin: 10px 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .local-pref-row label {
+    font-size: 12px;
+    color: var(--text-mid);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+  .local-pref-row input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--navy);
+  }
+  .local-pref-clear {
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text-light);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .local-pref-clear:hover {
+    border-color: var(--navy);
+    color: var(--navy);
+    background: #f7f9fe;
+  }
   .resume-upload-wrap {
     display: flex;
     flex-wrap: wrap;
@@ -22089,6 +22123,10 @@ var __async = (__this, __arguments, generator) => {
     <div class="step-body">
     <h2 class="step-headline">Step 1 — Your Secret Identity Key</h2>
     <p class="step-sub">This key unlocks the AI provider you picked. It stays in your browser session and is only used for your own requests.</p>
+    <div class="local-pref-row">
+      <label><input type="checkbox" id="rememberLocalToggle" onchange="toggleRememberLocal()"> Remember API key + resume on this device only</label>
+      <button type="button" class="local-pref-clear" id="clearLocalBtn" onclick="clearRememberedLocalData()" style="display:none;">Clear saved local data</button>
+    </div>
     <div class="api-bar" style="padding:0;border:none;">
       <div class="mode-toggle">
         <label for="modeSelect" style="font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-light);font-weight:600;">AI Provider</label>
@@ -22420,6 +22458,7 @@ function updateApiStatus() {
     if (step1Btn) step1Btn.disabled = true;
   }
   updateAccordionMeta();
+  persistLocalPrefsFromForm();
 }
 
 function isLikelyValidKey(mode, key) {
@@ -22440,6 +22479,89 @@ function providerName(mode) {
 
 function getApiKeyMessage() {
   return `Please add a valid ${providerName(currentMode)} API key above.`;
+}
+
+const LOCAL_PREFS_KEY = 'resumeTailor_localPrefs_v1';
+
+function loadLocalPrefs() {
+  try {
+    const raw = localStorage.getItem(LOCAL_PREFS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function persistLocalPrefsFromForm() {
+  const rememberToggle = document.getElementById('rememberLocalToggle');
+  if (!rememberToggle || !rememberToggle.checked) return;
+  const payload = {
+    rememberLocal: true,
+    currentMode: currentMode,
+    apiKey: document.getElementById('apiKey')?.value || '',
+    baseResume: document.getElementById('baseResume')?.value || '',
+    ollamaHost: document.getElementById('ollamaHost')?.value || '',
+    ollamaModel: document.getElementById('ollamaModel')?.value || ''
+  };
+  try {
+    localStorage.setItem(LOCAL_PREFS_KEY, JSON.stringify(payload));
+  } catch (e) {
+    setStatus('Could not save local profile on this device. Browser storage may be full.', 'warning');
+  }
+}
+
+function updateRememberUi() {
+  const rememberToggle = document.getElementById('rememberLocalToggle');
+  const clearBtn = document.getElementById('clearLocalBtn');
+  if (!rememberToggle || !clearBtn) return;
+  clearBtn.style.display = rememberToggle.checked ? 'inline-flex' : 'none';
+}
+
+function toggleRememberLocal() {
+  const rememberToggle = document.getElementById('rememberLocalToggle');
+  if (!rememberToggle) return;
+  if (rememberToggle.checked) {
+    persistLocalPrefsFromForm();
+    setStatus('Saved locally on this device. You can clear it anytime.', 'info');
+  } else {
+    try { localStorage.removeItem(LOCAL_PREFS_KEY); } catch {}
+    setStatus('Local remember is off. Nothing will be retained after refresh.', 'info');
+  }
+  updateRememberUi();
+}
+
+function clearRememberedLocalData() {
+  if (!confirm('Clear saved API key and resume on this device?')) return;
+  try { localStorage.removeItem(LOCAL_PREFS_KEY); } catch {}
+  const rememberToggle = document.getElementById('rememberLocalToggle');
+  if (rememberToggle) rememberToggle.checked = false;
+  updateRememberUi();
+  setStatus('Saved local profile cleared for this browser.', 'info');
+}
+
+function applyLocalPrefsOnLoad() {
+  const prefs = loadLocalPrefs();
+  const rememberToggle = document.getElementById('rememberLocalToggle');
+  if (!prefs || !prefs.rememberLocal) {
+    if (rememberToggle) rememberToggle.checked = false;
+    updateRememberUi();
+    return;
+  }
+  if (rememberToggle) rememberToggle.checked = true;
+  if (prefs.currentMode) currentMode = prefs.currentMode;
+  if (typeof prefs.apiKey === 'string') document.getElementById('apiKey').value = prefs.apiKey;
+  if (typeof prefs.baseResume === 'string') document.getElementById('baseResume').value = prefs.baseResume;
+  if (typeof prefs.ollamaHost === 'string' && prefs.ollamaHost) document.getElementById('ollamaHost').value = prefs.ollamaHost;
+  if (typeof prefs.ollamaModel === 'string' && prefs.ollamaModel) {
+    const modelSelect = document.getElementById('ollamaModel');
+    if (modelSelect && Array.from(modelSelect.options).some(o => o.value === prefs.ollamaModel)) {
+      modelSelect.value = prefs.ollamaModel;
+    }
+  }
+  updateRememberUi();
 }
 
 let currentStep = 1;
@@ -23025,6 +23147,7 @@ async function handleResumeFileUpload(event) {
     } else {
       setStatus(`Loaded <strong>${file.name}</strong> successfully. Review and edit before running fit analysis.`, 'info');
     }
+    persistLocalPrefsFromForm();
   } catch (err) {
     const msg = err?.message || 'Could not read the file.';
     setStatus(`Upload failed: ${msg}`, 'error');
@@ -23650,6 +23773,7 @@ function setMode(mode) {
   }
   updateApiStatus();
   updateAccordionMeta();
+  persistLocalPrefsFromForm();
 }
 
 async function generate() {
@@ -23994,6 +24118,7 @@ function clearAllHistory() {
 // Init history on load
 window.addEventListener('load', () => {
   document.getElementById('baseResume').value = DEFAULT_RESUME;
+  applyLocalPrefsOnLoad();
   renderHistory();
   setMode(currentMode);
   updateStep2Continue();
@@ -24002,7 +24127,13 @@ window.addEventListener('load', () => {
   ['company', 'role', 'jobDescription'].forEach(id => {
     document.getElementById(id).addEventListener('input', updateStep2Continue);
   });
-  document.getElementById('baseResume').addEventListener('input', updateAccordionMeta);
+  document.getElementById('baseResume').addEventListener('input', () => {
+    updateAccordionMeta();
+    persistLocalPrefsFromForm();
+  });
+  document.getElementById('apiKey').addEventListener('input', persistLocalPrefsFromForm);
+  document.getElementById('ollamaHost').addEventListener('input', persistLocalPrefsFromForm);
+  document.getElementById('ollamaModel').addEventListener('change', persistLocalPrefsFromForm);
   updateAccordionMeta();
   setHelpSection('getting-started', true);
 });

@@ -2,6 +2,18 @@
 
 This page shows where to create API keys and what to expect for cost.
 
+## Optional: Save Key Locally on Your Device
+
+In Step 1, you can enable:
+
+`Remember API key + resume on this device only`
+
+When enabled, the app stores your key and base resume in your browser's local storage so you do not have to paste again after refresh.
+
+- This is local to your browser/device only
+- You can clear it anytime with **Clear saved local data**
+- Do not enable this on a shared/public computer
+
 ## Quick Comparison
 
 | Provider | Sign-up URL | Key format example | Light use ballpark |
